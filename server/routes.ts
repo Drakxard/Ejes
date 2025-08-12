@@ -1,10 +1,10 @@
 import type { Express } from "express";
-import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { loadExercisesFromFiles } from "./services/exerciseParser";
 import { callGroqAPI } from "./services/groqApi";
 import { insertResponseSchema, insertSettingsSchema } from "@shared/schema";
 import { logger } from "./logger";
+import path from "path";
 
 // BKT helper functions
 function determineSectionDomain(topics: string[], exercises: any[]): string {
@@ -77,7 +77,7 @@ function calculateBKTProgress(sectionId: number, exercises: any[]): number {
   return Math.min(95, Math.round((baseProgress + domainBonus) * difficultyMultiplier));
 }
 
-export async function registerRoutes(app: Express): Promise<Server> {
+export async function registerRoutes(app: Express): Promise<void> {
   // Initialize exercises on startup
   try {
     await loadExercisesFromFiles();
@@ -293,23 +293,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Determine writable directory for uploaded sections
+  const getUploadDir = () => path.join(process.env.VERCEL ? '/tmp' : process.cwd(), 'sube-seccion');
+
   // Get list of uploaded section files
   app.get("/api/sections/files", async (req, res) => {
     try {
       const fs = await import('fs/promises');
-      const path = await import('path');
-      
-      const subeSeccionPath = path.join(process.cwd(), 'sube-seccion');
-      
+      const uploadDir = getUploadDir();
+
       try {
-        await fs.access(subeSeccionPath);
+        await fs.access(uploadDir);
       } catch {
         return res.json([]);
       }
-      
-      const files = await fs.readdir(subeSeccionPath);
+
+      const files = await fs.readdir(uploadDir);
       const jsFiles = files.filter(file => file.endsWith('.js'));
-      
+
       res.json(jsFiles);
     } catch (error) {
       console.error('Error reading section files:', error);
@@ -321,33 +322,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/sections/upload", async (req, res) => {
     try {
       const fs = await import('fs/promises');
-      const path = await import('path');
-      
       const { filename, content } = req.body;
-      
+
       if (!filename || !content) {
         return res.status(400).json({ error: 'Filename and content are required' });
       }
-      
+
       if (!filename.endsWith('.js')) {
         return res.status(400).json({ error: 'Only .js files are allowed' });
       }
-      
-      const subeSeccionPath = path.join(process.cwd(), 'sube-seccion');
-      
+
+      const uploadDir = getUploadDir();
+
       // Create directory if it doesn't exist
       try {
-        await fs.access(subeSeccionPath);
+        await fs.access(uploadDir);
       } catch {
-        await fs.mkdir(subeSeccionPath, { recursive: true });
+        await fs.mkdir(uploadDir, { recursive: true });
       }
-      
-      const filePath = path.join(subeSeccionPath, filename);
+
+      const filePath = path.join(uploadDir, filename);
       await fs.writeFile(filePath, content, 'utf8');
-      
+
       // Reload exercises
       await loadExercisesFromFiles();
-      
+
       res.json({ success: true, message: 'File uploaded successfully' });
     } catch (error) {
       console.error('Error uploading section file:', error);
@@ -359,24 +358,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/sections/files/:filename", async (req, res) => {
     try {
       const fs = await import('fs/promises');
-      const path = await import('path');
-      
       const filename = req.params.filename;
-      
+
       if (!filename.endsWith('.js')) {
         return res.status(400).json({ error: 'Only .js files can be deleted' });
       }
-      
-      const subeSeccionPath = path.join(process.cwd(), 'sube-seccion');
-      const filePath = path.join(subeSeccionPath, filename);
-      
+
+      const uploadDir = getUploadDir();
+      const filePath = path.join(uploadDir, filename);
+
       try {
         await fs.access(filePath);
         await fs.unlink(filePath);
-        
+
         // Reload exercises
         await loadExercisesFromFiles();
-        
+
         res.json({ success: true, message: 'File deleted successfully' });
       } catch (error) {
         res.status(404).json({ error: 'File not found' });
@@ -387,6 +384,4 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  const httpServer = createServer(app);
-  return httpServer;
 }

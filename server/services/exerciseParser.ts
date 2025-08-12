@@ -50,7 +50,7 @@ export async function loadExercisesFromFiles(): Promise<void> {
 
 async function loadFromSubeSeccion(allRawExercises: RawExercise[]): Promise<void> {
   try {
-    const subeSeccionPath = join(process.cwd(), 'sube-seccion');
+    const subeSeccionPath = join(process.env.VERCEL ? '/tmp' : process.cwd(), 'sube-seccion');
     
     // Check if sube-seccion directory exists
     try {
