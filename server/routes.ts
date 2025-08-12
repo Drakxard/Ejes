@@ -1,5 +1,4 @@
 import type { Express } from "express";
-import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { loadExercisesFromFiles } from "./services/exerciseParser";
 import { callGroqAPI } from "./services/groqApi";
@@ -77,7 +76,7 @@ function calculateBKTProgress(sectionId: number, exercises: any[]): number {
   return Math.min(95, Math.round((baseProgress + domainBonus) * difficultyMultiplier));
 }
 
-export async function registerRoutes(app: Express): Promise<Server> {
+export async function registerRoutes(app: Express): Promise<void> {
   // Initialize exercises on startup
   try {
     await loadExercisesFromFiles();
@@ -387,6 +386,4 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  const httpServer = createServer(app);
-  return httpServer;
 }
