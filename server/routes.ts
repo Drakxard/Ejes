@@ -227,8 +227,8 @@ export async function registerRoutes(app: Express): Promise<void> {
         return res.status(400).json({ error: 'Missing fields' });
       }
       const dir = join(process.cwd(), 'sube-seccion');
-      await fs.mkdir(dir, { recursive: true });
-      const filePath = join(dir, 'mejorar.js');
+      await fs.mkdir(dir, { recursive: true, mode: 0o777 });
+      const filePath = join(dir, 'mejoras.js');
       let ejercicios: any[] = [];
 
       try {
@@ -243,10 +243,10 @@ export async function registerRoutes(app: Express): Promise<void> {
 
       ejercicios.push({ tema, enunciado, ejercicio });
       const content = `export const ejercicios = ${JSON.stringify(ejercicios, null, 2)};\n`;
-      await fs.writeFile(filePath, content, 'utf-8');
+      await fs.writeFile(filePath, content, { encoding: 'utf-8', mode: 0o666 });
       res.json({ success: true });
     } catch (error) {
-      console.error('Error saving mejorar file:', error);
+      console.error('Error saving mejoras file:', error);
       res.status(500).json({ error: 'Failed to save file' });
     }
   });

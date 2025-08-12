@@ -65,6 +65,7 @@ interface AppState {
   previousExercise: () => void;
   // Marcar ejercicio para mejorar
   toggleImprove: (exercise: Exercise) => void;
+  forceImprove: (exercise: Exercise) => void;
 
   // Timer actions
   startTimer: () => void;
@@ -343,6 +344,22 @@ clearAllResponses: () => {
               })
             }).catch(() => {});
           }
+          return { improveMarks: marks };
+        });
+      },
+
+      forceImprove: (exercise) => {
+        set(state => {
+          const marks = { ...state.improveMarks, [exercise.id]: true };
+          fetch('/api/mejorar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              tema: exercise.tema,
+              enunciado: exercise.enunciado,
+              ejercicio: exercise.ejercicio,
+            })
+          }).catch(() => {});
           return { improveMarks: marks };
         });
       },
