@@ -1,7 +1,8 @@
-import { useRef, useEffect, useCallback } from 'react';
+import { useRef, useEffect, useCallback, useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useAppStore } from '@/store/useAppStore';
 import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
 import { ChevronLeft, ChevronRight, Settings, Timer } from 'lucide-react';
 import { SettingsModal } from '@/components/SettingsModal';
 import { FeedbackDialog } from '@/components/FeedbackDialog';
@@ -78,6 +79,30 @@ export default function StudyInterface() {
     onError: () => setAutoSaveStatus('error'),
   });
 
+  const [improve, setImprove] = useState(false);
+
+  const handleImproveToggle = useCallback(
+    async (checked: boolean) => {
+      setImprove(checked);
+      if (checked && currentExercise) {
+        try {
+          await fetch('/api/mejorar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              tema: currentExercise.tema,
+              enunciado: currentExercise.enunciado,
+              ejercicio: currentExercise.ejercicio,
+            }),
+          });
+        } catch (err) {
+          console.error('Failed to save improvement', err);
+        }
+      }
+    },
+    [currentExercise]
+  );
+
   useEffect(() => { if (exercisesData) setExercises(exercisesData); }, [exercisesData, setExercises]);
   useEffect(() => { if (settings) { setSettings(settings); if (settings.currentSection) setCurrentSection(settings.currentSection); } }, [settings, setSettings, setCurrentSection]);
 
@@ -137,6 +162,11 @@ export default function StudyInterface() {
         ?.click();
     }
 
+      if (e.ctrlKey && e.key.toLowerCase() === 'm') {
+        e.preventDefault();
+        handleImproveToggle(!improve);
+      }
+
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => {
@@ -148,6 +178,8 @@ export default function StudyInterface() {
     nextExercise,
     saveCurrentResponse, // importante incluirla como dependencia
     currentExercise,
+    handleImproveToggle,
+    improve,
   ]);
 
 
@@ -309,9 +341,18 @@ export default function StudyInterface() {
       />
       )}
     </div>
+      {/* Improve Switch */}
+      <div className="fixed bottom-4 right-4 flex items-center space-x-2">
+        <Switch
+          id="improve-switch"
+          checked={improve}
+          onCheckedChange={handleImproveToggle}
+        />
+        <label htmlFor="improve-switch" className="text-sm">Mejorar</label>
+      </div>
       {/* Bottom Shortcuts */}
       <div className="text-center p-2 text-xs text-gray-600 border-t border-gray-800">
-        Ctrl+← Anterior • Ctrl+→ Siguiente • Esc Configuración
+        Ctrl+← Anterior • Ctrl+→ Siguiente • Esc Configuración • Ctrl+M Mejora
       </div>
 
       {/* Settings Modal */}
