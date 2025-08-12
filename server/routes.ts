@@ -226,7 +226,13 @@ export async function registerRoutes(app: Express): Promise<void> {
       if (!tema || !enunciado) {
         return res.status(400).json({ error: 'Missing fields' });
       }
-      const dir = join(process.cwd(), 'sube-seccion');
+      // Vercel functions run on a read-only filesystem except for /tmp.
+      // When deployed on Vercel, store files in the writable /tmp directory.
+      // Locally, keep using the project directory so the file is created next to
+      // the practice files.
+      const dir = process.env.VERCEL
+        ? join('/tmp', 'sube-seccion')
+        : join(process.cwd(), 'sube-seccion');
       await fs.mkdir(dir, { recursive: true });
       const filePath = join(dir, 'mejorar.js');
       let ejercicios: any[] = [];
