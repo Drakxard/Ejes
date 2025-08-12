@@ -22,13 +22,12 @@ export function SettingsModal() {
     exercises,
     resetTimer,
     uploadExerciseFiles,
+    selectWorkDir,
   } = useAppStore();
 
   const clearAll = useAppStore(state => state.clearAllResponses);
   const exportAll = useAppStore(state => state.exportAllResponses);
   const importAll = useAppStore(state => state.importAllResponses);
-  const fileInputRef = useRef<HTMLInputElement>(null);
- const jsUploadRef   = useRef<HTMLInputElement>(null);
   const jsonImportRef = useRef<HTMLInputElement>(null);
 
   const handleExport = () => {
@@ -42,9 +41,6 @@ export function SettingsModal() {
     URL.revokeObjectURL(url);
   };
 
-  const handleImportClick = () => {
-    fileInputRef.current?.click();
-  };
   const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -156,27 +152,19 @@ const handleSave = () => {
   };
 
 const handleFileUpload = async () => {
-  const fileInput = fileInputRef.current;
-  const files = fileInput?.files ? Array.from(fileInput.files) : [];
-
-  if (files.length === 0) return;
+  if (multiFileNames.length === 0) return;
 
   setUploading(true);
   try {
-    // 1) Procesa y carga los archivos en memoria
+    const files = multiFileNames.map((name, idx) =>
+      new File([multiFileContents[idx]], name, { type: 'text/javascript' })
+    );
     await uploadExerciseFiles(files);
 
-    // 2) Limpia los inputs de UI
     setMultiFileNames([]);
     setMultiFileContents([]);
-    if (fileInput) fileInput.value = '';
-
-    // 3) (Opcional) Re-aplica la sección actual en el store
-    // setCurrentSection(formData.currentSection);
-
   } catch (err) {
     console.error("Error al subir archivos:", err);
-    // aquí podrías mostrar un toast de error
   } finally {
     setUploading(false);
   }
@@ -224,15 +212,23 @@ const [multiFileNames, setMultiFileNames] = useState<string[]>([]);
 const [multiFileContents, setMultiFileContents] = useState<string[]>([]);
 const [uploading, setUploading] = useState(false);
 
-// Handler para selección de carpeta
-const handleBulkFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-  const files = e.target.files ? Array.from(e.target.files) : [];
-  const jsFiles = files.filter(f => f.name.endsWith('.js'));
-  // Guardamos sólo los nombres de archivos .js
-  setMultiFileNames(jsFiles.map(f => f.name));
-  // Leemos todos los contenidos en paralelo
-  const texts = await Promise.all(jsFiles.map(f => f.text()));
-  setMultiFileContents(texts);
+// Solicita una carpeta y carga los archivos .js que contenga
+const handleSelectFolder = async () => {
+  try {
+    const dir = await selectWorkDir();
+    const files: File[] = [];
+    for await (const entry of (dir as any).values()) {
+      if (entry.kind === 'file' && entry.name.endsWith('.js')) {
+        const file = await entry.getFile();
+        files.push(file);
+      }
+    }
+    setMultiFileNames(files.map(f => f.name));
+    const texts = await Promise.all(files.map(f => f.text()));
+    setMultiFileContents(texts);
+  } catch (err) {
+    console.error('Error al seleccionar carpeta:', err);
+  }
 };
 
 
@@ -372,7 +368,7 @@ const getSectionName = (fileName?: string): string => {
               <div className="space-y-3">
                 <div className="flex items-center gap-2">
                   <Button
-                    onClick={() => fileInputRef.current?.click()}
+                    onClick={handleSelectFolder}
                     size="sm"
                     variant="outline"
                     className="bg-gray-800 border-gray-600 text-gray-200 hover:bg-gray-700"
@@ -381,15 +377,6 @@ const getSectionName = (fileName?: string): string => {
                     Cargar carpeta
                   </Button>
                   <span className="text-xs text-gray-500">Usará los archivos .js de la carpeta seleccionada</span>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    multiple
-                    onChange={handleBulkFileChange}
-                    className="hidden"
-                    directory=""
-                    webkitdirectory=""
-                  />
                 </div>
 
                 {multiFileNames.length > 0 && (
