@@ -1,7 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
-import { spawn } from "child_process";
+import { createServer } from "http";
 
 const app = express();
 app.use(express.json());
@@ -10,7 +10,7 @@ app.use(express.urlencoded({ extended: false }));
 app.use((req: Request, res: Response, next: NextFunction) => {
   const start = Date.now();
   const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
+  let capturedJsonResponse: Record<string, any> | undefined;
 
   const originalResJson = res.json;
   res.json = function (bodyJson, ...args) {
@@ -35,27 +35,31 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
-(async () => {
-  const isDev = process.env.NODE_ENV === 'development';
-  const port = 5000;
+const isDev = process.env.NODE_ENV === "development";
+const isVercel = Boolean(process.env.VERCEL);
+const port = Number(process.env.PORT) || 5000;
 
-  // Registrar rutas y manejar errores
-  const server = await registerRoutes(app);
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || 'Internal Server Error';
-    res.status(status).json({ message });
-    throw err;
-  });
+await registerRoutes(app);
+app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+  const status = err.status || err.statusCode || 500;
+  const message = err.message || "Internal Server Error";
+  res.status(status).json({ message });
+  throw err;
+});
 
-  // Configurar Vite en dev o servir estáticos en producción
+if (isVercel) {
+  serveStatic(app);
+} else {
+  const server = createServer(app);
   if (isDev) {
     await setupVite(app, server);
   } else {
     serveStatic(app);
   }
-
   server.listen({ port }, () => {
     log(`serving on port ${port}`);
-  });    // <— cierra server.listen
-})();   // <— cierra y ejecuta el IIFE
+  });
+}
+
+export default app;
+
