@@ -265,4 +265,13 @@ class FileStorage extends MemStorage {
   }
 }
 
-export const storage = new FileStorage();
+const dataDir = process.env.VERCEL ? '/tmp/ejes' : '/gestor/system/ejes';
+
+export const storage: IStorage = (() => {
+  try {
+    return new FileStorage(dataDir);
+  } catch (err) {
+    console.warn('Falling back to in-memory storage:', err);
+    return new MemStorage();
+  }
+})();
