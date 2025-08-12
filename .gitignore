@@ -43,3 +43,4 @@ Thumbs.db
 *.swp
 
 certs/*.pfx
+package-lock.json
