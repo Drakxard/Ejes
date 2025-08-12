@@ -31,12 +31,13 @@ export function ResponseTextarea({ className }: ResponseTextareaProps) {
 
   // Save response mutation
   const saveResponseMutation = useMutation({
-    mutationFn: async (content: string) => {
+    mutationFn: async ({ content, difficulty }: { content: string; difficulty?: number }) => {
       if (!currentExercise) throw new Error('No current exercise');
-      
+
       const response = await apiRequest('POST', '/api/responses', {
         exerciseId: currentExercise.id,
         content,
+        difficulty,
       });
       return response.json();
     },
@@ -59,7 +60,7 @@ export function ResponseTextarea({ className }: ResponseTextareaProps) {
     
     saveTimeoutRef.current = setTimeout(() => {
       if (content.trim()) {
-        saveResponseMutation.mutate(content);
+        saveResponseMutation.mutate({ content });
       }
     }, 2000); // Save after 2 seconds of inactivity
   }, [saveResponseMutation]);
@@ -95,13 +96,22 @@ export function ResponseTextarea({ className }: ResponseTextareaProps) {
     if (e.key === 'Enter' && e.ctrlKey) {
       e.preventDefault();
       if (currentResponse.trim()) {
-        saveResponseMutation.mutate(currentResponse);
+        saveResponseMutation.mutate({ content: currentResponse });
         nextExercise();
       }
     } else if (e.key === 's' && e.ctrlKey) {
       e.preventDefault();
       if (currentResponse.trim()) {
-        saveResponseMutation.mutate(currentResponse);
+        saveResponseMutation.mutate({ content: currentResponse });
+      }
+    } else if (e.key === '0' || e.key === '1') {
+      e.preventDefault();
+      if (currentResponse.trim()) {
+        const difficulty = e.key === '1' ? 1 : 0;
+        saveResponseMutation.mutate(
+          { content: currentResponse, difficulty },
+          { onSuccess: () => alert('Respuesta guardada') }
+        );
       }
     }
   };
