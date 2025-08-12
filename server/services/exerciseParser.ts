@@ -3,6 +3,32 @@ import { type InsertExercise } from "@shared/schema";
 import { promises as fs } from 'fs';
 import { join } from 'path';
 
+const memoryUploads: { filename: string; exercises: RawExercise[] }[] = [];
+
+export function getUploadedFilenames(): string[] {
+  return memoryUploads.map(u => u.filename);
+}
+
+export function removeUploadedFile(filename: string): void {
+  const index = memoryUploads.findIndex(u => u.filename === filename);
+  if (index !== -1) memoryUploads.splice(index, 1);
+}
+
+export async function addExercisesFromContent(filename: string, content: string): Promise<void> {
+  const fileUrl = `data:text/javascript;base64,${Buffer.from(content).toString('base64')}`;
+  const module = await import(fileUrl);
+  if (module.ejercicios && Array.isArray(module.ejercicios)) {
+    const sectionName = `Seccion ${memoryUploads.length + 4}`;
+    const sectionExercises = module.ejercicios.map((ex: RawExercise) => ({
+      ...ex,
+      seccion: sectionName,
+      _sourceFile: filename
+    }));
+    memoryUploads.push({ filename, exercises: sectionExercises });
+    await loadExercisesFromFiles();
+  }
+}
+
 interface RawExercise {
   seccion?: string;
   tema: string;
@@ -31,14 +57,18 @@ export async function loadExercisesFromFiles(): Promise<void> {
     
     // 2) Load from sube-seccion folder (dynamic uploads)
     await loadFromSubeSeccion(allRawExercises);
-    
-    // 3) Process and organize exercises
+
+    // 3) Load from in-memory uploads
+    loadFromMemoryUploads(allRawExercises);
+    // 4) Process and organize exercises
     const processedExercises = processExercises(allRawExercises);
-    
-    // 4) Store in memory
+
+    // 5) Store in memory
     await storage.createExercises(processedExercises);
-    
-    const maxSection = Math.max(...processedExercises.map(ex => ex.sectionId));
+
+    const maxSection = processedExercises.length > 0
+      ? Math.max(...processedExercises.map(ex => ex.sectionId))
+      : 0;
     console.log(`Loaded ${processedExercises.length} exercises across ${maxSection} sections`);
   } catch (error) {
     console.error("Error loading exercises:", error);
@@ -101,6 +131,12 @@ async function loadFromSubeSeccion(allRawExercises: RawExercise[]): Promise<void
     }
   } catch (error) {
     console.error("Error accessing sube-seccion folder:", error);
+  }
+}
+
+function loadFromMemoryUploads(allRawExercises: RawExercise[]): void {
+  for (const upload of memoryUploads) {
+    allRawExercises.push(...upload.exercises);
   }
 }
 

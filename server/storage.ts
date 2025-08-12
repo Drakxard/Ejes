@@ -265,4 +265,8 @@ class FileStorage extends MemStorage {
   }
 }
 
-export const storage = new FileStorage();
+const isVercel = Boolean(process.env.VERCEL);
+
+export const storage: IStorage = isVercel
+  ? new MemStorage()
+  : new FileStorage();
