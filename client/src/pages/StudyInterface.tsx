@@ -11,6 +11,7 @@ import { BKTProgress } from '@/components/BKTProgress';
 import type { Exercise, Settings as SettingsType } from '@shared/schema';
 import { MathRenderer } from '@/components/MathRenderer';
 import { ExerciseFeedbackButton } from '@/components/ExerciseFeedbackButton';
+import { Switch } from '@/components/ui/switch';
 export default function StudyInterface() {
   const {
     setExercises,
@@ -35,6 +36,8 @@ export default function StudyInterface() {
     autoSaveStatus,
     settings: appSettings,
     lastCursorPos, setLastCursorPos,
+    improveMarks,
+    toggleImprove,
   } = useAppStore();
   // Ref para el textarea
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -136,6 +139,12 @@ export default function StudyInterface() {
         .getElementById(`feedback-btn-${currentExercise?.id}`)
         ?.click();
     }
+      if (e.ctrlKey && e.key.toLowerCase() === 'm') {
+        e.preventDefault();
+        if (currentExercise) {
+          toggleImprove(currentExercise);
+        }
+      }
 
     };
     document.addEventListener('keydown', handleKeyDown);
@@ -148,6 +157,7 @@ export default function StudyInterface() {
     nextExercise,
     saveCurrentResponse, // importante incluirla como dependencia
     currentExercise,
+    toggleImprove,
   ]);
 
 
@@ -309,6 +319,15 @@ export default function StudyInterface() {
       />
       )}
     </div>
+    {currentExercise && (
+      <div className="fixed bottom-4 right-4 flex items-center space-x-2">
+        <span className="text-xs text-gray-400">Mejorar</span>
+        <Switch
+          checked={!!improveMarks[currentExercise.id]}
+          onCheckedChange={() => toggleImprove(currentExercise)}
+        />
+      </div>
+    )}
       {/* Bottom Shortcuts */}
       <div className="text-center p-2 text-xs text-gray-600 border-t border-gray-800">
         Ctrl+← Anterior • Ctrl+→ Siguiente • Esc Configuración
