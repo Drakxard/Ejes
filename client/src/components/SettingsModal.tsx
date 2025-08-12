@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useAppStore } from '@/store/useAppStore';
 import { apiRequest } from '@/lib/queryClient';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -12,7 +12,6 @@ import { Trash2, Upload, FileText, Plus,FileDown, FileUp, X, Save  } from 'lucid
 import type { Settings } from '@shared/schema';
 
 export function SettingsModal() {
-  const queryClient = useQueryClient();
   const {
     isSettingsOpen,
     toggleSettings,
@@ -22,7 +21,6 @@ export function SettingsModal() {
     setCurrentSection,
     exercises,
     resetTimer,
-    loadExercises,
     uploadExerciseFiles,
   } = useAppStore();
 
@@ -99,76 +97,9 @@ const updateSettingsMutation = useMutation({
       return response.json();
     },
   });
-// Section files queries and mutations
-const { data: sectionFiles = [] } = useQuery<string[]>({
-  queryKey: ['/api/sections/files'],
-  enabled: showSectionManager,
-});
-
-
-
-// — NUEVO: query para ejercicios dinámicos —
-const {
-  data: exercisesList = [],
-  refetch: refetchExercises,
-} = useQuery({
-  queryKey: ['/api/exercises'],
-  queryFn: () => fetch('/api/exercises').then(res => res.json()),
-  enabled: showSectionManager,
-});
-
-const uploadFileMutation = useMutation({
-  mutationFn: async ({ filename, content }: { filename: string; content: string }) => {
-    const response = await apiRequest('POST', '/api/sections/upload', { filename, content });
-    return response.json();
-  },
-  onSuccess: async () => {
-    // 1) invalidamos las queries
-    await queryClient.invalidateQueries({ queryKey: ['/api/sections/files'] });
-    await queryClient.invalidateQueries({ queryKey: ['/api/exercises'] });
-    await queryClient.invalidateQueries({ queryKey: ['/api/bkt/domains'] });
-
-    // 2) forzamos refetch inmediato
-    await queryClient.refetchQueries({ queryKey: ['/api/sections/files'] });
-    await queryClient.refetchQueries({ queryKey: ['/api/exercises'] });
-
-    // 3) refetch explícito para forzar propagación inmediata
-    await refetchExercises();
-
-    // 4) limpiamos el form de upload
-    setNewFileName('');
-    setNewFileContent('');
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  },
-});
-
-const deleteFileMutation = useMutation({
-  mutationFn: async (filename: string) => {
-    const response = await apiRequest(
-      'DELETE',
-      `/api/sections/files/${encodeURIComponent(filename)}`
-    );
-    return response.json();
-  },
-  onSuccess: async () => { // ← debes marcar esto como async
-    // 1) refrescamos la lista de archivos y ejercicios
-    await queryClient.invalidateQueries({ queryKey: ['/api/sections/files'] });
-    await queryClient.invalidateQueries({ queryKey: ['/api/exercises'] });
-    await queryClient.invalidateQueries({ queryKey: ['/api/bkt/domains'] });
-
-    // 2) además disparamos el refetch explícito
-    await refetchExercises();
-
-    // 3) limpiamos el form de upload
-    setNewFileName('');
-    setNewFileContent('');
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  },
-});
+// Usar archivos de sección almacenados en el estado
+const sectionFiles = useAppStore(state => state.sectionFiles);
+const removeSectionFile = useAppStore(state => state.removeSectionFile);
 
 
 
@@ -232,7 +163,7 @@ const handleFileUpload = async () => {
 
   setUploading(true);
   try {
-    // 1) Sube todos los archivos al servidor
+    // 1) Procesa y carga los archivos en memoria
     await uploadExerciseFiles(files);
 
     // 2) Limpia los inputs de UI
@@ -240,16 +171,7 @@ const handleFileUpload = async () => {
     setMultiFileContents([]);
     if (fileInput) fileInput.value = '';
 
-    // 3) Invalida los caches de React Query
-    await queryClient.invalidateQueries({ queryKey: ['/api/sections/files'] });
-    await queryClient.invalidateQueries({ queryKey: ['/api/exercises'] });
-    await queryClient.invalidateQueries({ queryKey: ['/api/bkt/domains'] });
-
-    // 4) Fuerza refetch inmediato
-    await refetchSectionFiles();
-    await refetchExercises();
-
-    // 5) (Opcional) Re-aplica la sección actual en el store
+    // 3) (Opcional) Re-aplica la sección actual en el store
     // setCurrentSection(formData.currentSection);
 
   } catch (err) {
@@ -265,7 +187,7 @@ const handleFileUpload = async () => {
   // Handle file deletion
   const handleFileDelete = (filename: string) => {
     if (confirm(`¿Estás seguro de que quieres eliminar el archivo ${filename}?`)) {
-      deleteFileMutation.mutate(filename);
+      removeSectionFile(filename);
     }
   };
 
@@ -291,9 +213,9 @@ const handleDeleteAllFiles = () => {
     return;
   }
 
-  // Ejecutar la mutación para cada archivo
+  // Eliminar cada archivo del estado
   sectionFiles.forEach((filename) => {
-    deleteFileMutation.mutate(filename);
+    removeSectionFile(filename);
   });
 };
 
