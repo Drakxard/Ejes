@@ -4,6 +4,12 @@ import { loadExercisesFromFiles, addExercisesFromContent, getUploadedFilenames, 
 import { callGroqAPI } from "./services/groqApi";
 import { insertResponseSchema, insertSettingsSchema } from "@shared/schema";
 import { logger } from "./logger";
+import path from "path";
+import { fileURLToPath } from "url";
+import { promises as fs } from "fs";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // BKT helper functions
 function determineSectionDomain(topics: string[], exercises: any[]): string {
@@ -321,6 +327,24 @@ export async function registerRoutes(app: Express): Promise<void> {
     } catch (error) {
       console.error('Error uploading section file:', error);
       res.status(500).json({ error: 'Failed to upload section file' });
+    }
+  });
+
+  app.post("/api/mejorar", async (req, res) => {
+    try {
+      const { tema, enunciado, ejercicio } = req.body;
+      const filePath = path.join(__dirname, "mejorar.js");
+      let data: any[] = [];
+      try {
+        const file = await fs.readFile(filePath, "utf-8");
+        data = JSON.parse(file || "[]");
+      } catch {}
+      data.push({ tema, enunciado, ejercicio });
+      await fs.writeFile(filePath, JSON.stringify(data, null, 2));
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Error saving improvement:', error);
+      res.status(500).json({ error: 'Failed to save improvement' });
     }
   });
 
