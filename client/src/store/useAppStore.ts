@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Exercise, Settings, Response } from '@shared/schema';
-import { sortByNumericPrefix } from '@/utils/sort'
+import { sortByNumericPrefix } from '@/utils/sort';
 interface TimerState {
   minutes: number;
   seconds: number;
@@ -21,9 +21,10 @@ interface AppState {
   lastCursorPos: Record<number, number>;
   // Acción para actualizar el mapa completo de posiciones
   setLastCursorPos: (positions: Record<number, number>) => void;
-  uploadExerciseFiles: (files: File[]) => Promise<void>
+  uploadExerciseFiles: (files: File[]) => Promise<void>;
   sectionFiles: string[];
   setSectionFiles: (files: string[]) => void;
+  removeSectionFile: (filename: string) => void;
   // Timer
   timer: TimerState;
   timerInterval: number | null;
@@ -131,11 +132,17 @@ export const useAppStore = create<AppState>()(
       sectionCountdown: 5,
       showRestBreak: false,
       restBreakMinutes: 5,
-sectionFiles: [],
-setSectionFiles: (files: string[]) => {
-  const sorted = [...files].sort(sortByNumericPrefix);
-  set({ sectionFiles: sorted });
-},
+      sectionFiles: [],
+      setSectionFiles: (files: string[]) => {
+        const sorted = [...files].sort(sortByNumericPrefix);
+        set({ sectionFiles: sorted });
+      },
+      removeSectionFile: (filename: string) => {
+        set(state => ({
+          sectionFiles: state.sectionFiles.filter(f => f !== filename),
+          exercises: state.exercises.filter((ex: any) => ex.fileName !== filename)
+        }));
+      },
 
 
 clearAllResponses: () => {
@@ -187,26 +194,39 @@ clearAllResponses: () => {
 
  
       uploadExerciseFiles: async (files: File[]) => {
+        const state = get();
+        const existingExercises = [...state.exercises];
+        const existingFiles = [...state.sectionFiles];
+        let nextSectionId = existingExercises.reduce((max, ex) => Math.max(max, ex.sectionId), 0) + 1;
+
         for (const file of files) {
           if (!file.name.endsWith('.js')) continue;
-          const content = await file.text();
-          const res = await fetch('/api/sections/upload', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ filename: file.name, content }),
-          });
-          if (!res.ok) {
-            const err = await res.json().catch(() => ({}));
-            throw new Error(`Error subiendo ${file.name}: ${err.error || res.statusText}`);
+          try {
+            const content = await file.text();
+            const fileUrl = `data:text/javascript;base64,${btoa(content)}`;
+            const module: any = await import(fileUrl);
+            if (Array.isArray(module.ejercicios)) {
+              const newExercises = module.ejercicios.map((ex: any, idx: number) => ({
+                id: existingExercises.length + idx + 1,
+                sectionId: nextSectionId,
+                tema: ex.tema || '',
+                enunciado: ex.enunciado || '',
+                ejercicio: ex.ejercicio || ex.id || '',
+                order: idx,
+                fileName: file.name,
+              }));
+              existingExercises.push(...(newExercises as any));
+              existingFiles.push(file.name);
+              nextSectionId++;
+            }
+          } catch (err) {
+            console.error(`Error al procesar ${file.name}:`, err);
+            throw err;
           }
         }
 
-        // 3) Recuperar la lista cruda
-        const filesList: string[] = await fetch('/api/sections/files')
-          .then(r => r.json());
-
-        // 4) Guardarla ordenada en el store
-        get().setSectionFiles(filesList);
+        get().setExercises(existingExercises as any);
+        state.setSectionFiles(existingFiles);
       },
 
 
