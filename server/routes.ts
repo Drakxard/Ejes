@@ -230,15 +230,17 @@ export async function registerRoutes(app: Express): Promise<void> {
       await fs.mkdir(dir, { recursive: true });
       const filePath = join(dir, 'mejorar.js');
       let ejercicios: any[] = [];
+
       try {
-        const fileUrl = new URL(`file://${filePath}?update=${Date.now()}`);
-        const module = await import(fileUrl.href);
-        if (Array.isArray((module as any).ejercicios)) {
-          ejercicios = module.ejercicios as any[];
+        const existing = await fs.readFile(filePath, 'utf-8');
+        const match = existing.match(/export const ejercicios = (\[[\s\S]*\]);?/);
+        if (match?.[1]) {
+          ejercicios = JSON.parse(match[1]);
         }
       } catch {
-        // file might not exist yet
+        // file might not exist yet or couldn't be parsed
       }
+
       ejercicios.push({ tema, enunciado, ejercicio });
       const content = `export const ejercicios = ${JSON.stringify(ejercicios, null, 2)};\n`;
       await fs.writeFile(filePath, content, 'utf-8');
