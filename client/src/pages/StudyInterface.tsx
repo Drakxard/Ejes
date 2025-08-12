@@ -145,6 +145,12 @@ export default function StudyInterface() {
           toggleImprove(currentExercise);
         }
       }
+      if (e.ctrlKey && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        if (currentExercise && !improveMarks[currentExercise.id]) {
+          toggleImprove(currentExercise);
+        }
+      }
 
     };
     document.addEventListener('keydown', handleKeyDown);
