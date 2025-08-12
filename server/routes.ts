@@ -4,6 +4,8 @@ import { loadExercisesFromFiles, addExercisesFromContent, getUploadedFilenames, 
 import { callGroqAPI } from "./services/groqApi";
 import { insertResponseSchema, insertSettingsSchema } from "@shared/schema";
 import { logger } from "./logger";
+import { promises as fs } from 'fs';
+import { join } from 'path';
 
 // BKT helper functions
 function determineSectionDomain(topics: string[], exercises: any[]): string {
@@ -214,6 +216,36 @@ export async function registerRoutes(app: Express): Promise<void> {
     } catch (error) {
       console.error('Error fetching BKT domains:', error);
       res.status(500).json({ error: 'Failed to fetch BKT data' });
+    }
+  });
+
+  // Guardar ejercicios marcados para mejorar
+  app.post('/api/mejorar', async (req, res) => {
+    try {
+      const { tema, enunciado, ejercicio } = req.body;
+      if (!tema || !enunciado) {
+        return res.status(400).json({ error: 'Missing fields' });
+      }
+      const dir = join(process.cwd(), 'sube-seccion');
+      await fs.mkdir(dir, { recursive: true });
+      const filePath = join(dir, 'mejorar.js');
+      let ejercicios: any[] = [];
+      try {
+        const fileUrl = new URL(`file://${filePath}?update=${Date.now()}`);
+        const module = await import(fileUrl.href);
+        if (Array.isArray((module as any).ejercicios)) {
+          ejercicios = module.ejercicios as any[];
+        }
+      } catch {
+        // file might not exist yet
+      }
+      ejercicios.push({ tema, enunciado, ejercicio });
+      const content = `export const ejercicios = ${JSON.stringify(ejercicios, null, 2)};\n`;
+      await fs.writeFile(filePath, content, 'utf-8');
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Error saving mejorar file:', error);
+      res.status(500).json({ error: 'Failed to save file' });
     }
   });
 

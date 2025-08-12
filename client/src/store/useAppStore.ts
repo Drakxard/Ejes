@@ -19,6 +19,8 @@ interface AppState {
   responses: Record<number, string>; // exerciseId -> response
   // Mapa exerciseId → posición de cursor dentro del textarea
   lastCursorPos: Record<number, number>;
+  // Ejercicios marcados para mejorar
+  improveMarks: Record<number, boolean>;
   // Acción para actualizar el mapa completo de posiciones
   setLastCursorPos: (positions: Record<number, number>) => void;
   uploadExerciseFiles: (files: File[]) => Promise<void>
@@ -61,6 +63,8 @@ interface AppState {
   loadResponse: (exerciseId: number) => string;
   nextExercise: () => void;
   previousExercise: () => void;
+  // Marcar ejercicio para mejorar
+  toggleImprove: (exercise: Exercise) => void;
 
   // Timer actions
   startTimer: () => void;
@@ -99,6 +103,7 @@ export const useAppStore = create<AppState>()(
       responses: {},
       // Inicialmente no hay posiciones de cursor guardadas:
       lastCursorPos: {},
+      improveMarks: {},
 
       // Setter: reemplaza el mapa completo
       setLastCursorPos: (positions: Record<number, number>) => {
@@ -322,7 +327,25 @@ clearAllResponses: () => {
           });
         }
       },
-
+      
+      toggleImprove: (exercise) => {
+        set(state => {
+          const isOn = !state.improveMarks[exercise.id];
+          const marks = { ...state.improveMarks, [exercise.id]: isOn };
+          if (isOn) {
+            fetch('/api/mejorar', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                tema: exercise.tema,
+                enunciado: exercise.enunciado,
+                ejercicio: exercise.ejercicio,
+              })
+            }).catch(() => {});
+          }
+          return { improveMarks: marks };
+        });
+      },
 
 
       // Timer actions
