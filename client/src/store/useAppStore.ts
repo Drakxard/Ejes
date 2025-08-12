@@ -24,6 +24,7 @@ interface AppState {
   uploadExerciseFiles: (files: File[]) => Promise<void>
   sectionFiles: string[];
   setSectionFiles: (files: string[]) => void;
+  removeSectionFile: (filename: string) => void;
   // Timer
   timer: TimerState;
   timerInterval: number | null;
@@ -131,11 +132,17 @@ export const useAppStore = create<AppState>()(
       sectionCountdown: 5,
       showRestBreak: false,
       restBreakMinutes: 5,
-sectionFiles: [],
-setSectionFiles: (files: string[]) => {
-  const sorted = [...files].sort(sortByNumericPrefix);
-  set({ sectionFiles: sorted });
-},
+      sectionFiles: [],
+      setSectionFiles: (files: string[]) => {
+        const sorted = [...files].sort(sortByNumericPrefix);
+        set({ sectionFiles: sorted });
+      },
+      removeSectionFile: (filename: string) => {
+        set(state => ({
+          sectionFiles: state.sectionFiles.filter(f => f !== filename),
+          exercises: state.exercises.filter(ex => (ex as any).fileName !== filename)
+        }));
+      },
 
 
 clearAllResponses: () => {
@@ -187,26 +194,54 @@ clearAllResponses: () => {
 
  
       uploadExerciseFiles: async (files: File[]) => {
+        const state = get();
+        const existingExercises = state.exercises;
+        let nextId = existingExercises.length > 0
+          ? Math.max(...existingExercises.map(ex => ex.id)) + 1
+          : 1;
+        let nextSectionId = existingExercises.length > 0
+          ? Math.max(...existingExercises.map(ex => ex.sectionId)) + 1
+          : 1;
+
+        const newExercises: Exercise[] = [];
+        const newFileNames: string[] = [];
+
         for (const file of files) {
           if (!file.name.endsWith('.js')) continue;
           const content = await file.text();
-          const res = await fetch('/api/sections/upload', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ filename: file.name, content }),
-          });
-          if (!res.ok) {
-            const err = await res.json().catch(() => ({}));
-            throw new Error(`Error subiendo ${file.name}: ${err.error || res.statusText}`);
+          const blobUrl = URL.createObjectURL(new Blob([content], { type: 'text/javascript' }));
+          try {
+            const module: any = await import(/* @vite-ignore */ blobUrl);
+            if (Array.isArray(module.ejercicios)) {
+              let order = 0;
+              for (const ex of module.ejercicios) {
+                const exercise: Exercise = {
+                  id: nextId++,
+                  sectionId: nextSectionId,
+                  tema: ex.tema,
+                  enunciado: ex.enunciado || '',
+                  ejercicio: ex.ejercicio || ex.id || '',
+                  order: order++,
+                } as Exercise;
+                (exercise as any).fileName = file.name;
+                newExercises.push(exercise);
+              }
+              newFileNames.push(file.name);
+              nextSectionId++;
+            }
+          } finally {
+            URL.revokeObjectURL(blobUrl);
           }
         }
 
-        // 3) Recuperar la lista cruda
-        const filesList: string[] = await fetch('/api/sections/files')
-          .then(r => r.json());
-
-        // 4) Guardarla ordenada en el store
-        get().setSectionFiles(filesList);
+        if (newExercises.length > 0) {
+          const allExercises = [...existingExercises, ...newExercises];
+          get().setExercises(allExercises);
+        }
+        if (newFileNames.length > 0) {
+          const allFiles = [...state.sectionFiles, ...newFileNames];
+          get().setSectionFiles(allFiles);
+        }
       },
 
 
