@@ -21,9 +21,9 @@ interface AppState {
   lastCursorPos: Record<number, number>;
   // Ejercicios marcados para mejorar
   improveMarks: Record<number, boolean>;
-  improveDir: FileSystemDirectoryHandle | null;
+  workDir: FileSystemDirectoryHandle | null;
   improveList: { tema: string; enunciado: string; ejercicio: string }[];
-  selectImproveDir: () => Promise<void>;
+  selectWorkDir: () => Promise<void>;
   saveImproveFile: () => Promise<void>;
   // Acción para actualizar el mapa completo de posiciones
   setLastCursorPos: (positions: Record<number, number>) => void;
@@ -108,7 +108,7 @@ export const useAppStore = create<AppState>()(
       // Inicialmente no hay posiciones de cursor guardadas:
       lastCursorPos: {},
       improveMarks: {},
-      improveDir: null,
+      workDir: null,
       improveList: [],
 
       // Setter: reemplaza el mapa completo
@@ -155,11 +155,12 @@ export const useAppStore = create<AppState>()(
         }));
       },
 
-      selectImproveDir: async () => {
+      selectWorkDir: async () => {
         const dir = await (window as any).showDirectoryPicker();
-        set({ improveDir: dir });
+        set({ workDir: dir });
+
         try {
-          const fileHandle = await dir.getFileHandle('mejorar.js', { create: false });
+          const fileHandle = await dir.getFileHandle('mejoras.js', { create: false });
           const file = await fileHandle.getFile();
           const text = await file.text();
           const match = text.match(/export const ejercicios = (\[[\s\S]*\]);?/);
@@ -168,12 +169,23 @@ export const useAppStore = create<AppState>()(
         } catch {
           set({ improveList: [] });
         }
+
+        const files: File[] = [];
+        for await (const entry of (dir as any).values()) {
+          if (entry.kind === 'file' && entry.name.endsWith('.js') && entry.name !== 'mejoras.js') {
+            const file = await entry.getFile();
+            files.push(file);
+          }
+        }
+        if (files.length > 0) {
+          await get().uploadExerciseFiles(files);
+        }
       },
 
       saveImproveFile: async () => {
         const state = get();
-        if (!state.improveDir) return;
-        const fileHandle = await state.improveDir.getFileHandle('mejorar.js', { create: true });
+        if (!state.workDir) return;
+        const fileHandle = await state.workDir.getFileHandle('mejoras.js', { create: true });
         const writable = await fileHandle.createWritable();
         const content = `export const ejercicios = ${JSON.stringify(state.improveList, null, 2)};\n`;
         await writable.write(content);
@@ -360,9 +372,9 @@ clearAllResponses: () => {
       },
       
       toggleImprove: async (exercise) => {
-        if (!get().improveDir) {
+        if (!get().workDir) {
           try {
-            await get().selectImproveDir();
+            await get().selectWorkDir();
           } catch {
             return;
           }
