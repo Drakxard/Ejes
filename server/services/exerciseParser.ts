@@ -66,7 +66,9 @@ export async function loadExercisesFromFiles(): Promise<void> {
     // 5) Store in memory
     await storage.createExercises(processedExercises);
 
-    const maxSection = Math.max(...processedExercises.map(ex => ex.sectionId));
+    const maxSection = processedExercises.length
+      ? Math.max(...processedExercises.map(ex => ex.sectionId))
+      : 0;
     console.log(`Loaded ${processedExercises.length} exercises across ${maxSection} sections`);
   } catch (error) {
     console.error("Error loading exercises:", error);
