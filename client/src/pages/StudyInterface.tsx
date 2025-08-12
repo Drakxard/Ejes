@@ -38,6 +38,7 @@ export default function StudyInterface() {
     lastCursorPos, setLastCursorPos,
     improveMarks,
     toggleImprove,
+    forceImprove,
   } = useAppStore();
   // Ref para el textarea
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -145,6 +146,12 @@ export default function StudyInterface() {
           toggleImprove(currentExercise);
         }
       }
+      if (e.ctrlKey && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        if (currentExercise) {
+          forceImprove(currentExercise);
+        }
+      }
 
     };
     document.addEventListener('keydown', handleKeyDown);
@@ -158,6 +165,7 @@ export default function StudyInterface() {
     saveCurrentResponse, // importante incluirla como dependencia
     currentExercise,
     toggleImprove,
+    forceImprove,
   ]);
 
 
