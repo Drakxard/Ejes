@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Exercise, Settings, Response } from '@shared/schema';
 import { sortByNumericPrefix } from '@/utils/sort'
+import { appendMejorarFile } from '@/utils/mejorarFile';
 interface TimerState {
   minutes: number;
   seconds: number;
@@ -21,6 +22,7 @@ interface AppState {
   lastCursorPos: Record<number, number>;
   // Ejercicios marcados para mejorar
   improveMarks: Record<number, boolean>;
+  directoryHandle: FileSystemDirectoryHandle | null;
   // Acción para actualizar el mapa completo de posiciones
   setLastCursorPos: (positions: Record<number, number>) => void;
   uploadExerciseFiles: (files: File[]) => Promise<void>
@@ -64,7 +66,8 @@ interface AppState {
   nextExercise: () => void;
   previousExercise: () => void;
   // Marcar ejercicio para mejorar
-  toggleImprove: (exercise: Exercise) => void;
+  toggleImprove: (exercise: Exercise) => Promise<void>;
+  setDirectoryHandle: (handle: FileSystemDirectoryHandle) => void;
 
   // Timer actions
   startTimer: () => void;
@@ -104,6 +107,7 @@ export const useAppStore = create<AppState>()(
       // Inicialmente no hay posiciones de cursor guardadas:
       lastCursorPos: {},
       improveMarks: {},
+      directoryHandle: null,
 
       // Setter: reemplaza el mapa completo
       setLastCursorPos: (positions: Record<number, number>) => {
@@ -113,11 +117,14 @@ export const useAppStore = create<AppState>()(
       feedbacks: {},
       setFeedback: (exerciseId, feedback) =>
         set(state => ({
-          feedbacks: { 
-            ...state.feedbacks, 
-            [exerciseId]: feedback 
+          feedbacks: {
+            ...state.feedbacks,
+            [exerciseId]: feedback
           }
         })),
+      setDirectoryHandle: (handle: FileSystemDirectoryHandle) => {
+        set({ directoryHandle: handle });
+      },
       timer: {
         minutes: 25,
         seconds: 0,
@@ -328,23 +335,27 @@ clearAllResponses: () => {
         }
       },
       
-      toggleImprove: (exercise) => {
-        set(state => {
-          const isOn = !state.improveMarks[exercise.id];
-          const marks = { ...state.improveMarks, [exercise.id]: isOn };
-          if (isOn) {
-            fetch('/api/mejorar', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                tema: exercise.tema,
-                enunciado: exercise.enunciado,
-                ejercicio: exercise.ejercicio,
-              })
-            }).catch(() => {});
+      toggleImprove: async (exercise) => {
+        const state = get();
+        const isOn = !state.improveMarks[exercise.id];
+        const marks = { ...state.improveMarks, [exercise.id]: isOn };
+        set({ improveMarks: marks });
+        if (isOn) {
+          try {
+            let dir = state.directoryHandle;
+            if (!dir) {
+              dir = await (window as any).showDirectoryPicker();
+              set({ directoryHandle: dir });
+            }
+            await appendMejorarFile(dir, {
+              tema: exercise.tema,
+              enunciado: exercise.enunciado,
+              ejercicio: exercise.ejercicio,
+            });
+          } catch {
+            // ignore errors
           }
-          return { improveMarks: marks };
-        });
+        }
       },
 
 
