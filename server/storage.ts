@@ -2,6 +2,7 @@ import { exercises, responses, settings, sessions, type Exercise, type InsertExe
 import fs from 'fs';
 import { promises as fsp } from 'fs';
 import path from 'path';
+const isVercel = Boolean(process.env.VERCEL);
 
 export interface IStorage {
   // Exercises
@@ -265,4 +266,4 @@ class FileStorage extends MemStorage {
   }
 }
 
-export const storage = new FileStorage();
+export const storage: IStorage = isVercel ? new MemStorage() : new FileStorage();

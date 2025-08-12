@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAppStore } from '@/store/useAppStore';
 import { apiRequest } from '@/lib/queryClient';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -302,13 +302,14 @@ const [multiFileNames, setMultiFileNames] = useState<string[]>([]);
 const [multiFileContents, setMultiFileContents] = useState<string[]>([]);
 const [uploading, setUploading] = useState(false);
 
-// Handler para selección múltiple
+// Handler para selección de carpeta
 const handleBulkFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
   const files = e.target.files ? Array.from(e.target.files) : [];
-  // Guardamos sólo los nombres
-  setMultiFileNames(files.map(f => f.name));
+  const jsFiles = files.filter(f => f.name.endsWith('.js'));
+  // Guardamos sólo los nombres de archivos .js
+  setMultiFileNames(jsFiles.map(f => f.name));
   // Leemos todos los contenidos en paralelo
-  const texts = await Promise.all(files.map(f => f.text()));
+  const texts = await Promise.all(jsFiles.map(f => f.text()));
   setMultiFileContents(texts);
 };
 
@@ -356,6 +357,9 @@ const getSectionName = (fileName?: string): string => {
           <DialogTitle className="text-lg font-medium text-gray-200">
             Configuración
           </DialogTitle>
+          <DialogDescription className="sr-only">
+            Ajustes de la plataforma
+          </DialogDescription>
         </DialogHeader>
         
         <div className="space-y-4">
@@ -455,16 +459,17 @@ const getSectionName = (fileName?: string): string => {
                     className="bg-gray-800 border-gray-600 text-gray-200 hover:bg-gray-700"
                   >
                     <Upload className="h-4 w-4 mr-1" />
-                    Seleccionar archivos
+                    Cargar carpeta
                   </Button>
-                  <span className="text-xs text-gray-500">Solo archivos .js</span>
+                  <span className="text-xs text-gray-500">Usará los archivos .js de la carpeta seleccionada</span>
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept=".js"
                     multiple
                     onChange={handleBulkFileChange}
                     className="hidden"
+                    directory=""
+                    webkitdirectory=""
                   />
                 </div>
 
