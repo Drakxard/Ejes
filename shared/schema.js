@@ -12,6 +12,7 @@ export var responses = pgTable("responses", {
     id: serial("id").primaryKey(),
     exerciseId: integer("exercise_id").notNull(),
     content: text("content").notNull(),
+    difficulty: integer("difficulty").notNull().default(0),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
 });
