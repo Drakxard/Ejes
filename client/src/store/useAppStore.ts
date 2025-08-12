@@ -21,6 +21,10 @@ interface AppState {
   lastCursorPos: Record<number, number>;
   // Ejercicios marcados para mejorar
   improveMarks: Record<number, boolean>;
+  improveDir: FileSystemDirectoryHandle | null;
+  improveList: { tema: string; enunciado: string; ejercicio: string }[];
+  selectImproveDir: () => Promise<void>;
+  saveImproveFile: () => Promise<void>;
   // Acción para actualizar el mapa completo de posiciones
   setLastCursorPos: (positions: Record<number, number>) => void;
   uploadExerciseFiles: (files: File[]) => Promise<void>
@@ -64,7 +68,7 @@ interface AppState {
   nextExercise: () => void;
   previousExercise: () => void;
   // Marcar ejercicio para mejorar
-  toggleImprove: (exercise: Exercise) => void;
+  toggleImprove: (exercise: Exercise) => Promise<void>;
 
   // Timer actions
   startTimer: () => void;
@@ -104,6 +108,8 @@ export const useAppStore = create<AppState>()(
       // Inicialmente no hay posiciones de cursor guardadas:
       lastCursorPos: {},
       improveMarks: {},
+      improveDir: null,
+      improveList: [],
 
       // Setter: reemplaza el mapa completo
       setLastCursorPos: (positions: Record<number, number>) => {
@@ -147,6 +153,31 @@ export const useAppStore = create<AppState>()(
           sectionFiles: state.sectionFiles.filter(f => f !== filename),
           exercises: state.exercises.filter(ex => (ex as any).fileName !== filename)
         }));
+      },
+
+      selectImproveDir: async () => {
+        const dir = await (window as any).showDirectoryPicker();
+        set({ improveDir: dir });
+        try {
+          const fileHandle = await dir.getFileHandle('mejorar.js', { create: false });
+          const file = await fileHandle.getFile();
+          const text = await file.text();
+          const match = text.match(/export const ejercicios = (\[[\s\S]*\]);?/);
+          const list = match?.[1] ? JSON.parse(match[1]) : [];
+          set({ improveList: list });
+        } catch {
+          set({ improveList: [] });
+        }
+      },
+
+      saveImproveFile: async () => {
+        const state = get();
+        if (!state.improveDir) return;
+        const fileHandle = await state.improveDir.getFileHandle('mejorar.js', { create: true });
+        const writable = await fileHandle.createWritable();
+        const content = `export const ejercicios = ${JSON.stringify(state.improveList, null, 2)};\n`;
+        await writable.write(content);
+        await writable.close();
       },
 
 
@@ -328,23 +359,29 @@ clearAllResponses: () => {
         }
       },
       
-      toggleImprove: (exercise) => {
-        set(state => {
-          const isOn = !state.improveMarks[exercise.id];
-          const marks = { ...state.improveMarks, [exercise.id]: isOn };
-          if (isOn) {
-            fetch('/api/mejorar', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                tema: exercise.tema,
-                enunciado: exercise.enunciado,
-                ejercicio: exercise.ejercicio,
-              })
-            }).catch(() => {});
+      toggleImprove: async (exercise) => {
+        if (!get().improveDir) {
+          try {
+            await get().selectImproveDir();
+          } catch {
+            return;
           }
-          return { improveMarks: marks };
-        });
+        }
+        const state = get();
+        const isOn = !state.improveMarks[exercise.id];
+        const marks = { ...state.improveMarks, [exercise.id]: isOn };
+        let list = state.improveList.slice();
+        if (isOn) {
+          list.push({
+            tema: exercise.tema,
+            enunciado: exercise.enunciado,
+            ejercicio: exercise.ejercicio,
+          });
+        } else {
+          list = list.filter(e => !(e.tema === exercise.tema && e.enunciado === exercise.enunciado && e.ejercicio === exercise.ejercicio));
+        }
+        set({ improveMarks: marks, improveList: list });
+        await get().saveImproveFile();
       },
 
 
