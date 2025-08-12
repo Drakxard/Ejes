@@ -227,13 +227,14 @@ const handleSave = () => {
 const handleFileUpload = async () => {
   const fileInput = fileInputRef.current;
   const files = fileInput?.files ? Array.from(fileInput.files) : [];
+  const jsFiles = files.filter(f => f.name.endsWith('.js'));
 
-  if (files.length === 0) return;
+  if (jsFiles.length === 0) return;
 
   setUploading(true);
   try {
-    // 1) Sube todos los archivos al servidor
-    await uploadExerciseFiles(files);
+    // 1) Sube todos los archivos .js al servidor
+    await uploadExerciseFiles(jsFiles);
 
     // 2) Limpia los inputs de UI
     setMultiFileNames([]);
@@ -305,10 +306,11 @@ const [uploading, setUploading] = useState(false);
 // Handler para selección múltiple
 const handleBulkFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
   const files = e.target.files ? Array.from(e.target.files) : [];
-  // Guardamos sólo los nombres
-  setMultiFileNames(files.map(f => f.name));
+  const jsFiles = files.filter(f => f.name.endsWith('.js'));
+  // Guardamos los nombres o rutas relativas
+  setMultiFileNames(jsFiles.map(f => f.webkitRelativePath || f.name));
   // Leemos todos los contenidos en paralelo
-  const texts = await Promise.all(files.map(f => f.text()));
+  const texts = await Promise.all(jsFiles.map(f => f.text()));
   setMultiFileContents(texts);
 };
 
@@ -445,7 +447,7 @@ const getSectionName = (fileName?: string): string => {
               </ul>
 
               {/* El resto: formulario de subida… */}
-              {/* Upload Section (multi-file) */}
+              {/* Upload Section (folder) */}
               <div className="space-y-3">
                 <div className="flex items-center gap-2">
                   <Button
@@ -455,9 +457,11 @@ const getSectionName = (fileName?: string): string => {
                     className="bg-gray-800 border-gray-600 text-gray-200 hover:bg-gray-700"
                   >
                     <Upload className="h-4 w-4 mr-1" />
-                    Seleccionar archivos
+                    Cargar carpeta
                   </Button>
-                  <span className="text-xs text-gray-500">Solo archivos .js</span>
+                  <span className="text-xs text-gray-500">
+                    Se cargarán los archivos .js de la carpeta
+                  </span>
                   <input
                     ref={fileInputRef}
                     type="file"
@@ -465,6 +469,7 @@ const getSectionName = (fileName?: string): string => {
                     multiple
                     onChange={handleBulkFileChange}
                     className="hidden"
+                    {...({ webkitdirectory: true } as any)}
                   />
                 </div>
 
