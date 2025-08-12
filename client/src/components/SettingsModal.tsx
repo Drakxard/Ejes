@@ -22,12 +22,13 @@ export function SettingsModal() {
     exercises,
     resetTimer,
     uploadExerciseFiles,
+    setDirectoryHandle,
   } = useAppStore();
 
   const clearAll = useAppStore(state => state.clearAllResponses);
   const exportAll = useAppStore(state => state.exportAllResponses);
   const importAll = useAppStore(state => state.importAllResponses);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+const fileInputRef = useRef<HTMLInputElement>(null);
  const jsUploadRef   = useRef<HTMLInputElement>(null);
   const jsonImportRef = useRef<HTMLInputElement>(null);
 
@@ -45,7 +46,7 @@ export function SettingsModal() {
   const handleImportClick = () => {
     fileInputRef.current?.click();
   };
-  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     file.text().then(text => {
@@ -235,6 +236,15 @@ const handleBulkFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
   setMultiFileContents(texts);
 };
 
+const handleGrantAccess = async () => {
+  try {
+    const dir = await (window as any).showDirectoryPicker();
+    setDirectoryHandle(dir);
+  } catch (err) {
+    console.error('Directory access denied', err);
+  }
+};
+
 
 // Calcula dinámicamente las secciones según el nombre del fichero
 // Calcula dinámicamente las secciones según el nombre del fichero
@@ -379,6 +389,15 @@ const getSectionName = (fileName?: string): string => {
                   >
                     <Upload className="h-4 w-4 mr-1" />
                     Cargar carpeta
+                  </Button>
+                  <Button
+                    onClick={handleGrantAccess}
+                    size="sm"
+                    variant="outline"
+                    className="bg-gray-800 border-gray-600 text-gray-200 hover:bg-gray-700"
+                  >
+                    <Save className="h-4 w-4 mr-1" />
+                    Permitir guardar feedback
                   </Button>
                   <span className="text-xs text-gray-500">Usará los archivos .js de la carpeta seleccionada</span>
                   <input
