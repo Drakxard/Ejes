@@ -1,4 +1,4 @@
-import { exercises, responses, settings, sessions, type Exercise, type InsertExercise, type Response, type InsertResponse, type Settings, type InsertSettings, type Session, type InsertSession } from "@shared/schema";
+import { exercises, responses, settings, sessions, materials, type Exercise, type InsertExercise, type Response, type InsertResponse, type Settings, type InsertSettings, type Session, type InsertSession, type Material, type InsertMaterial } from "@shared/schema";
 import fs from 'fs';
 import { promises as fsp } from 'fs';
 import path from 'path';
@@ -18,11 +18,15 @@ export interface IStorage {
   // Settings
   getSettings(): Promise<Settings | undefined>;
   updateSettings(settings: Partial<InsertSettings>): Promise<Settings>;
-  
+
   // Sessions
   getCurrentSession(): Promise<Session | undefined>;
   createSession(session: InsertSession): Promise<Session>;
   updateSession(id: number, session: Partial<InsertSession>): Promise<Session>;
+
+  // Materials
+  getMaterials(): Promise<Material[]>;
+  markMaterialSeen(id: number): Promise<Material | undefined>;
 }
 
 export class MemStorage implements IStorage {
@@ -30,7 +34,8 @@ export class MemStorage implements IStorage {
   protected responses: Map<number, Response> = new Map();
   protected settings: Settings | undefined;
   protected sessions: Map<number, Session> = new Map();
-  protected currentId = { exercises: 1, responses: 1, settings: 1, sessions: 1 };
+  protected materials: Map<number, Material> = new Map();
+  protected currentId = { exercises: 1, responses: 1, settings: 1, sessions: 1, materials: 1 };
   async clearExercises(): Promise<void> {
     this.exercises.clear();
     this.currentId.exercises = 1;
@@ -45,6 +50,17 @@ export class MemStorage implements IStorage {
       currentSection: 1,
       currentExercise: 0,
     };
+
+    // Default materials
+    const defaultMaterial: InsertMaterial = {
+      subject: 'Matemáticas',
+      title: 'Guía de estudio',
+      pdf: '/materials/sample.pdf',
+      type: 'teoria',
+      seen: false,
+    };
+    const material: Material = { ...defaultMaterial, id: this.currentId.materials++ };
+    this.materials.set(material.id, material);
   }
 
   async getExercises(): Promise<Exercise[]> {
@@ -153,11 +169,24 @@ export class MemStorage implements IStorage {
     this.sessions.set(id, updated);
     return updated;
   }
+
+  async getMaterials(): Promise<Material[]> {
+    return Array.from(this.materials.values());
+  }
+
+  async markMaterialSeen(id: number): Promise<Material | undefined> {
+    const material = this.materials.get(id);
+    if (material) {
+      material.seen = true;
+      this.materials.set(id, material);
+    }
+    return material;
+  }
 }
 
 class FileStorage extends MemStorage {
   private dataDir: string;
-  private paths: { responses: string; settings: string; exercises: string; sessions: string };
+  private paths: { responses: string; settings: string; exercises: string; sessions: string; materials: string };
 
   constructor(dir = path.resolve('/gestor/system/ejes')) {
     super();
@@ -168,6 +197,7 @@ class FileStorage extends MemStorage {
       settings: path.join(this.dataDir, 'settings.json'),
       exercises: path.join(this.dataDir, 'exercises.json'),
       sessions: path.join(this.dataDir, 'sessions.json'),
+      materials: path.join(this.dataDir, 'materials.json'),
     };
     this.loadFromDisk();
   }
@@ -200,6 +230,23 @@ class FileStorage extends MemStorage {
         });
         this.currentId.sessions = arr.reduce((m, s) => Math.max(m, s.id), 0) + 1;
       }
+      if (fs.existsSync(this.paths.materials)) {
+        const arr: Material[] = JSON.parse(fs.readFileSync(this.paths.materials, 'utf-8'));
+        arr.forEach(m => this.materials.set(m.id, m));
+        this.currentId.materials = arr.reduce((m, m2) => Math.max(m, m2.id), 0) + 1;
+      }
+      if (this.materials.size === 0) {
+        const defaultMaterial: InsertMaterial = {
+          subject: 'Matemáticas',
+          title: 'Guía de estudio',
+          pdf: '/materials/sample.pdf',
+          type: 'teoria',
+          seen: false,
+        };
+        const material: Material = { ...defaultMaterial, id: this.currentId.materials++ };
+        this.materials.set(material.id, material);
+        this.saveMaterials();
+      }
     } catch (err) {
       console.error('Failed to load storage from disk', err);
     }
@@ -221,6 +268,10 @@ class FileStorage extends MemStorage {
 
   private async saveSessions() {
     await fsp.writeFile(this.paths.sessions, JSON.stringify(Array.from(this.sessions.values()), null, 2));
+  }
+
+  private async saveMaterials() {
+    await fsp.writeFile(this.paths.materials, JSON.stringify(Array.from(this.materials.values()), null, 2));
   }
 
   async clearExercises(): Promise<void> {
@@ -262,6 +313,12 @@ class FileStorage extends MemStorage {
     const s = await super.updateSession(id, updateSession);
     await this.saveSessions();
     return s;
+  }
+
+  async markMaterialSeen(id: number): Promise<Material | undefined> {
+    const m = await super.markMaterialSeen(id);
+    await this.saveMaterials();
+    return m;
   }
 }
 

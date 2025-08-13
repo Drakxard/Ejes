@@ -39,6 +39,15 @@ export const sessions = pgTable("sessions", {
   exercisesCompleted: integer("exercises_completed").default(0),
 });
 
+export const materials = pgTable("materials", {
+  id: serial("id").primaryKey(),
+  subject: text("subject").notNull(),
+  title: text("title").notNull(),
+  pdf: text("pdf").notNull(),
+  type: text("type").notNull(),
+  seen: boolean("seen").default(false),
+});
+
 export const insertExerciseSchema = createInsertSchema(exercises).omit({
   id: true,
 });
@@ -58,6 +67,10 @@ export const insertSessionSchema = createInsertSchema(sessions).omit({
   startTime: true,
 });
 
+export const insertMaterialSchema = createInsertSchema(materials).omit({
+  id: true,
+});
+
 export type Exercise = typeof exercises.$inferSelect;
 export type InsertExercise = z.infer<typeof insertExerciseSchema>;
 export type Response = typeof responses.$inferSelect;
@@ -66,3 +79,5 @@ export type Settings = typeof settings.$inferSelect;
 export type InsertSettings = z.infer<typeof insertSettingsSchema>;
 export type Session = typeof sessions.$inferSelect;
 export type InsertSession = z.infer<typeof insertSessionSchema>;
+export type Material = typeof materials.$inferSelect;
+export type InsertMaterial = z.infer<typeof insertMaterialSchema>;
