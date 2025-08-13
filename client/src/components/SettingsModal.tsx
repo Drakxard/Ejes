@@ -7,9 +7,17 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
-import { Trash2, Upload, FileText, Plus,FileDown, FileUp, X, Save  } from 'lucide-react';
+import { Trash2, Upload, FileText, FileDown, FileUp, X, Save  } from 'lucide-react';
 import type { Settings } from '@shared/schema';
+
+interface SettingsFormData {
+  pomodoroMinutes: number;
+  maxTimeMinutes: number;
+  groqApiKey: string;
+  groqModelId: string;
+  feedbackPrompt: string;
+  currentSection: string;
+}
 
 export function SettingsModal() {
   const {
@@ -21,14 +29,12 @@ export function SettingsModal() {
     setCurrentSection,
     exercises,
     resetTimer,
-    uploadExerciseFiles,
+    selectWorkDir,
   } = useAppStore();
 
   const clearAll = useAppStore(state => state.clearAllResponses);
   const exportAll = useAppStore(state => state.exportAllResponses);
   const importAll = useAppStore(state => state.importAllResponses);
-  const fileInputRef = useRef<HTMLInputElement>(null);
- const jsUploadRef   = useRef<HTMLInputElement>(null);
   const jsonImportRef = useRef<HTMLInputElement>(null);
 
   const handleExport = () => {
@@ -42,9 +48,6 @@ export function SettingsModal() {
     URL.revokeObjectURL(url);
   };
 
-  const handleImportClick = () => {
-    fileInputRef.current?.click();
-  };
   const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -58,8 +61,6 @@ export function SettingsModal() {
 
   // Section files management state
   const [showSectionManager, setShowSectionManager] = useState(false);
-  const [newFileName, setNewFileName] = useState('');
-  const [newFileContent, setNewFileContent] = useState('');
 
 
   // Load settings from server
@@ -100,50 +101,75 @@ const updateSettingsMutation = useMutation({
 // Usar archivos de sección almacenados en el estado
 const sectionFiles = useAppStore(state => state.sectionFiles);
 const removeSectionFile = useAppStore(state => state.removeSectionFile);
+const sectionFileNames = Array.from(
+  new Set(exercises.map(ex => (ex as any).fileName))
+).sort();
+const sectionOptions = sectionFileNames.map(name => ({
+  value: name,
+  label: name,
+}));
+const defaultSection = sectionFileNames[0] ?? '';
 
-
+const [formData, setFormData] = useState<SettingsFormData>({
+  pomodoroMinutes: 25,
+  maxTimeMinutes: 10,
+  groqApiKey: '',
+  groqModelId: 'llama-3.1-8b-instant',
+  feedbackPrompt: '',
+  currentSection: defaultSection,
+});
 
 
 // Load settings into form — sólo inicializamos una vez
+const initialLoaded = useRef(false);
+
 useEffect(() => {
   if (serverSettings && !initialLoaded.current) {
+    const sectionFromServer = serverSettings.currentSection
+      ? sectionFileNames[serverSettings.currentSection - 1] || defaultSection
+      : defaultSection;
     setFormData({
-      pomodoroMinutes: serverSettings.pomodoroMinutes  || 25,
-      maxTimeMinutes:  serverSettings.maxTimeMinutes   || 10,
-      groqApiKey:      serverSettings.groqApiKey       || '',
-      groqModelId:     serverSettings.groqModelId      || 'llama-3.1-8b-instant',
-      feedbackPrompt:  serverSettings.feedbackPrompt   || '',
-      currentSection:  serverSettings.currentSection   || 1,
+      pomodoroMinutes: serverSettings.pomodoroMinutes ?? 25,
+      maxTimeMinutes:  serverSettings.maxTimeMinutes ?? 10,
+      groqApiKey:      serverSettings.groqApiKey ?? '',
+      groqModelId:     serverSettings.groqModelId ?? 'llama-3.1-8b-instant',
+      feedbackPrompt:  serverSettings.feedbackPrompt ?? '',
+      currentSection:  sectionFromServer,
     });
     initialLoaded.current = true;
   }
-}, [serverSettings]);
+}, [serverSettings, sectionFileNames]);
 
-  // Aquí declaras tu ref:
-  const initialLoaded = useRef(false);
+useEffect(() => {
+  if (sectionFileNames.length > 0 && !formData.currentSection) {
+    setFormData(prev => ({
+      ...prev,
+      currentSection: sectionFileNames[0],
+    }));
+  }
+}, [sectionFileNames]);
 // Handle form submission
 const handleSave = () => {
-  // 1) Guardar ajustes en el servidor
-  updateSettingsMutation.mutate(formData);
+  // Determinar el número de sección según el archivo seleccionado
+  const filename = formData.currentSection;
+  const idx = sectionFiles.findIndex(f => f === filename);
+  const newSectionId = idx >= 0 ? idx + 1 : currentSectionId;
 
-  // 2) Actualizar sección actual (si cambió)
-  //    formData.currentSection es un string con el nombre de fichero,
-  //    sectionFiles es el array de strings que obtienes con useQuery.
-  const filename = formData.currentSection;                  // ej. "03-intro.js"
-  const idx = sectionFiles.findIndex((f) => f === filename); // ej. 2
-  const newSectionId = idx >= 0 ? idx + 1 : currentSectionId; // 1-based
+  // Guardar ajustes en el servidor con el ID numérico de sección
+  updateSettingsMutation.mutate({
+    ...formData,
+    currentSection: newSectionId,
+  });
 
+  // Actualizar sección actual en el estado si cambió
   if (newSectionId !== currentSectionId) {
     setCurrentSection(newSectionId);
   }
 
-  // 3) Reset timer si cambió el pomodoro
+  // Reset timer si cambió el pomodoro
   if (formData.pomodoroMinutes !== settings?.pomodoroMinutes) {
     resetTimer(formData.pomodoroMinutes);
   }
-
-  // 4) (opcional) cerrar modal aquí
-  // toggleSettings();
 };
 
 
@@ -155,53 +181,10 @@ const handleSave = () => {
     testApiMutation.mutate();
   };
 
-const handleFileUpload = async () => {
-  const fileInput = fileInputRef.current;
-  const files = fileInput?.files ? Array.from(fileInput.files) : [];
-
-  if (files.length === 0) return;
-
-  setUploading(true);
-  try {
-    // 1) Procesa y carga los archivos en memoria
-    await uploadExerciseFiles(files);
-
-    // 2) Limpia los inputs de UI
-    setMultiFileNames([]);
-    setMultiFileContents([]);
-    if (fileInput) fileInput.value = '';
-
-    // 3) (Opcional) Re-aplica la sección actual en el store
-    // setCurrentSection(formData.currentSection);
-
-  } catch (err) {
-    console.error("Error al subir archivos:", err);
-    // aquí podrías mostrar un toast de error
-  } finally {
-    setUploading(false);
-  }
-};
-
-
-
   // Handle file deletion
   const handleFileDelete = (filename: string) => {
     if (confirm(`¿Estás seguro de que quieres eliminar el archivo ${filename}?`)) {
       removeSectionFile(filename);
-    }
-  };
-
-  // Handle file input
-  const handleFileInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file && file.name.endsWith('.js')) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const content = e.target?.result as string;
-        setNewFileName(file.name);
-        setNewFileContent(content);
-      };
-      reader.readAsText(file);
     }
   };
 
@@ -219,47 +202,7 @@ const handleDeleteAllFiles = () => {
   });
 };
 
-// Estados para múltiples archivos
-const [multiFileNames, setMultiFileNames] = useState<string[]>([]);
-const [multiFileContents, setMultiFileContents] = useState<string[]>([]);
-const [uploading, setUploading] = useState(false);
 
-// Handler para selección de carpeta
-const handleBulkFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-  const files = e.target.files ? Array.from(e.target.files) : [];
-  const jsFiles = files.filter(f => f.name.endsWith('.js'));
-  // Guardamos sólo los nombres de archivos .js
-  setMultiFileNames(jsFiles.map(f => f.name));
-  // Leemos todos los contenidos en paralelo
-  const texts = await Promise.all(jsFiles.map(f => f.text()));
-  setMultiFileContents(texts);
-};
-
-
-// Calcula dinámicamente las secciones según el nombre del fichero
-// Calcula dinámicamente las secciones según el nombre del fichero
-const sectionFileNames = Array.from(
-  new Set(exercises.map(ex => ex.fileName))
-).sort();
-// A partir de los nombres de fichero, crea las opciones
-const sectionOptions = sectionFileNames.map(name => ({
-  value: name,
-  label: name,
-}));
-
-// inicializa con el primer archivo (o "")
-const defaultSection = sectionFileNames[0] ?? '';
-useEffect(() => {
-  if (sectionFileNames.length > 0 && !formData.currentSection) {
-    setFormData(prev => ({
-      ...prev,
-      currentSection: sectionFileNames[0],  // usa el primer nombre de archivo
-    }));
-  }
-}, [sectionFileNames]);
-const [formData, setFormData] = useState<{ currentSection: string }>({
-  currentSection: defaultSection,
-});
 
 const getSectionName = (fileName?: string): string => {
   if (!fileName) return 'Sin sección';
@@ -356,7 +299,7 @@ const getSectionName = (fileName?: string): string => {
                   <li key={filename} className="flex justify-between items-center bg-gray-800 p-2 rounded">
                     <span className="text-gray-200 text-sm font-mono">{filename}</span>
                     <Button
-                      size="xs"
+                      size="icon"
                       variant="ghost"
                       className="text-red-500 hover:bg-red-600 hover:text-white"
                       onClick={() => handleFileDelete(filename)}
@@ -367,72 +310,20 @@ const getSectionName = (fileName?: string): string => {
                 ))}
               </ul>
 
-              {/* El resto: formulario de subida… */}
-              {/* Upload Section (multi-file) */}
+              {/* Selección de carpeta para ejercicios y mejoras */}
               <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <Button
-                    onClick={() => fileInputRef.current?.click()}
-                    size="sm"
-                    variant="outline"
-                    className="bg-gray-800 border-gray-600 text-gray-200 hover:bg-gray-700"
-                  >
-                    <Upload className="h-4 w-4 mr-1" />
-                    Cargar carpeta
-                  </Button>
-                  <span className="text-xs text-gray-500">Usará los archivos .js de la carpeta seleccionada</span>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    multiple
-                    onChange={handleBulkFileChange}
-                    className="hidden"
-                    directory=""
-                    webkitdirectory=""
-                  />
-                </div>
-
-                {multiFileNames.length > 0 && (
-                  <div className="space-y-4">
-                    {multiFileNames.map((name, idx) => (
-                      <div key={idx} className="p-2 bg-gray-800 rounded space-y-1">
-                        <p className="text-sm font-medium text-gray-200">{name}</p>
-                        <Textarea
-                          value={multiFileContents[idx]}
-                          onChange={e => {
-                            const arr = [...multiFileContents];
-                            arr[idx] = e.target.value;
-                            setMultiFileContents(arr);
-                          }}
-                          placeholder="Contenido del archivo JavaScript..."
-                          className="bg-gray-700 text-gray-100 font-mono text-sm h-24"
-                        />
-                      </div>
-                    ))}
-                    <div className="flex gap-2">
-                      <Button
-                        onClick={handleFileUpload}
-                        disabled={uploading}
-                        size="sm"
-                        className="bg-green-600 hover:bg-green-700"
-                      >
-                        <Plus className="h-4 w-4 mr-1" />
-                        {uploading ? 'Subiendo...' : 'Subir todos'}
-                      </Button>
-                      <Button
-                        onClick={() => {
-                          setMultiFileNames([]);
-                          setMultiFileContents([]);
-                        }}
-                        size="sm"
-                        variant="outline"
-                        className="bg-gray-800 border-gray-600 text-gray-200"
-                      >
-                        Cancelar
-                      </Button>
-                    </div>
-                  </div>
-                )}
+                <Button
+                  onClick={selectWorkDir}
+                  size="sm"
+                  variant="outline"
+                  className="bg-gray-800 border-gray-600 text-gray-200 hover:bg-gray-700"
+                >
+                  <Upload className="h-4 w-4 mr-1" />
+                  Seleccionar carpeta
+                </Button>
+                <span className="text-xs text-gray-500">
+                  Se utilizarán los archivos .js de la carpeta y se guardará mejoras.js
+                </span>
               </div>
 
 
@@ -486,21 +377,6 @@ const getSectionName = (fileName?: string): string => {
             )}
           </div>
 
-          {/* Custom Feedback Prompt 
-          <div>
-            <Label className="block text-sm font-medium mb-2 text-gray-300">
-              Prompt personalizado para feedback
-            </Label>
-            <Textarea
-              placeholder="Personaliza cómo la IA genera feedback..."
-              value={formData.feedbackPrompt}
-              onChange={(e) => setFormData(prev => ({ ...prev, feedbackPrompt: e.target.value }))}
-              className="bg-gray-800 border-gray-700 text-gray-200 placeholder-gray-500 min-h-[100px]"
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Define cómo quieres que la IA analice y responda a tus ejercicios
-            </p>
-          </div>*/}
         </div>
         <div className="flex justify-end space-x-3 mt-6">
   {/* Borrar respuestas (solo icono) */}
