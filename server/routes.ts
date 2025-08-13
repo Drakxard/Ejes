@@ -120,6 +120,29 @@ export async function registerRoutes(app: Express): Promise<void> {
     }
   });
 
+  // Materials endpoints
+  app.get("/api/materials", async (_req, res) => {
+    try {
+      const materials = await storage.getMaterials();
+      res.json(materials);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch materials" });
+    }
+  });
+
+  app.post("/api/materials/:id/read", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const material = await storage.markMaterialSeen(id);
+      if (!material) {
+        return res.status(404).json({ error: "Material not found" });
+      }
+      res.json(material);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update material" });
+    }
+  });
+
   // Save response
   app.post("/api/responses", async (req, res) => {
     try {
