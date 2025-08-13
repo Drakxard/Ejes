@@ -1,8 +1,9 @@
-import { useRef, useEffect, useCallback } from 'react';
+import { useRef, useEffect, useCallback, useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useAppStore } from '@/store/useAppStore';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight, Settings, Timer } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Settings, Timer, Info } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { SettingsModal } from '@/components/SettingsModal';
 import { FeedbackDialog } from '@/components/FeedbackDialog';
 import { SectionTransitionDialog } from '@/components/SectionTransitionDialog';
@@ -43,6 +44,7 @@ export default function StudyInterface() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { data: exercisesData } = useQuery<Exercise[]>({ queryKey: ['/api/exercises'] });
   const { data: settings } = useQuery<SettingsType>({ queryKey: ['/api/settings'] });
+  const [showInfo, setShowInfo] = useState(false);
 
   // Guardar posición en cada cambio
   const handleResponseChange = (value: string) => {
@@ -174,8 +176,7 @@ export default function StudyInterface() {
   return (
     <div className="min-h-screen bg-gray-950 text-gray-200 flex flex-col relative">
       {/* --- Section Hover Navigator (pega SOLO este bloque) --- */}
-    <div className="fixed top-1/2 left-0 transform -translate-y-1/2">
-      <div className="group relative h-32 w-4">
+    <div className="group fixed left-0 top-0 h-full">
         {/* Hotspot */}
         <div className="absolute inset-y-0 left-0 w-2 cursor-pointer"></div>
         {/* Navigator panel */}
@@ -194,18 +195,20 @@ export default function StudyInterface() {
             </button>
           ))}
         </div>
-      </div>
     </div>
-    {/* --- Fin Section Hover Navigator --- */}
+      {/* --- Fin Section Hover Navigator --- */}
 
 
       {/* Top Bar */}
-      <div className="flex justify-between items-center p-4 border-b border-gray-800">
+      <div className="flex flex-wrap justify-between items-center gap-2 p-4 border-b border-gray-800">
         <div className="text-sm text-gray-400">Sección {currentSectionId}/{totalSections}</div>
         <div className="flex items-center space-x-2 text-sm text-gray-400">
           <Timer className="w-4 h-4" /><span className="font-mono">{formatTime(timer.minutes, timer.seconds)}</span>
         </div>
-        <Button variant="ghost" size="sm" onClick={toggleSettings} className="p-2 hover:bg-gray-800 hover:text-white text-gray-400"><Settings className="w-4 h-4"/></Button>
+        <div className="flex items-center space-x-2">
+          <Button variant="ghost" size="sm" onClick={() => setShowInfo(true)} className="p-2 hover:bg-gray-800 hover:text-white text-gray-400"><Info className="w-4 h-4"/></Button>
+          <Button variant="ghost" size="sm" onClick={toggleSettings} className="p-2 hover:bg-gray-800 hover:text-white text-gray-400"><Settings className="w-4 h-4"/></Button>
+        </div>
       </div>
 
 {/* Main Content */}
@@ -341,9 +344,23 @@ export default function StudyInterface() {
       
       {/* Section Transition Dialog */}
       <SectionTransitionDialog />
-      
+
       {/* Rest Break Dialog */}
       <RestBreakDialog />
+
+      {/* Info Dialog */}
+      {showInfo && (
+        <Dialog open={showInfo} onOpenChange={setShowInfo}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Guía rápida</DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-gray-300">
+              Usa las flechas para navegar y la sección de materias para ver los PDF y marcarlos como leídos.
+            </p>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }
