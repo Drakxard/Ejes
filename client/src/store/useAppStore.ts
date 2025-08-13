@@ -59,7 +59,6 @@ interface AppState {
 
   // Actions
   setExercises: (exercises: Exercise[]) => void;
-  loadExercises: () => Promise<void>;               // ← NUEVO método
   setCurrentSection: (sectionId: number) => void;
   setCurrentExercise: (index: number) => void;
   setCurrentResponse: (response: string) => void;
@@ -157,6 +156,8 @@ export const useAppStore = create<AppState>()(
 
       selectWorkDir: async () => {
         const dir = await (window as any).showDirectoryPicker();
+        const perm = await (dir as any).requestPermission?.({ mode: 'readwrite' });
+        if (perm && perm !== 'granted') return;
         set({ workDir: dir });
 
         try {

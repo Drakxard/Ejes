@@ -10,6 +10,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Trash2, Upload, FileText, FileDown, FileUp, X, Save  } from 'lucide-react';
 import type { Settings } from '@shared/schema';
 
+interface SettingsFormData {
+  pomodoroMinutes: number;
+  maxTimeMinutes: number;
+  groqApiKey: string;
+  groqModelId: string;
+  feedbackPrompt: string;
+  currentSection: string;
+}
+
 export function SettingsModal() {
   const {
     isSettingsOpen,
@@ -92,50 +101,75 @@ const updateSettingsMutation = useMutation({
 // Usar archivos de sección almacenados en el estado
 const sectionFiles = useAppStore(state => state.sectionFiles);
 const removeSectionFile = useAppStore(state => state.removeSectionFile);
+const sectionFileNames = Array.from(
+  new Set(exercises.map(ex => (ex as any).fileName))
+).sort();
+const sectionOptions = sectionFileNames.map(name => ({
+  value: name,
+  label: name,
+}));
+const defaultSection = sectionFileNames[0] ?? '';
 
-
+const [formData, setFormData] = useState<SettingsFormData>({
+  pomodoroMinutes: 25,
+  maxTimeMinutes: 10,
+  groqApiKey: '',
+  groqModelId: 'llama-3.1-8b-instant',
+  feedbackPrompt: '',
+  currentSection: defaultSection,
+});
 
 
 // Load settings into form — sólo inicializamos una vez
+const initialLoaded = useRef(false);
+
 useEffect(() => {
   if (serverSettings && !initialLoaded.current) {
+    const sectionFromServer = serverSettings.currentSection
+      ? sectionFileNames[serverSettings.currentSection - 1] || defaultSection
+      : defaultSection;
     setFormData({
-      pomodoroMinutes: serverSettings.pomodoroMinutes  || 25,
-      maxTimeMinutes:  serverSettings.maxTimeMinutes   || 10,
-      groqApiKey:      serverSettings.groqApiKey       || '',
-      groqModelId:     serverSettings.groqModelId      || 'llama-3.1-8b-instant',
-      feedbackPrompt:  serverSettings.feedbackPrompt   || '',
-      currentSection:  serverSettings.currentSection   || 1,
+      pomodoroMinutes: serverSettings.pomodoroMinutes ?? 25,
+      maxTimeMinutes:  serverSettings.maxTimeMinutes ?? 10,
+      groqApiKey:      serverSettings.groqApiKey ?? '',
+      groqModelId:     serverSettings.groqModelId ?? 'llama-3.1-8b-instant',
+      feedbackPrompt:  serverSettings.feedbackPrompt ?? '',
+      currentSection:  sectionFromServer,
     });
     initialLoaded.current = true;
   }
-}, [serverSettings]);
+}, [serverSettings, sectionFileNames]);
 
-  // Aquí declaras tu ref:
-  const initialLoaded = useRef(false);
+useEffect(() => {
+  if (sectionFileNames.length > 0 && !formData.currentSection) {
+    setFormData(prev => ({
+      ...prev,
+      currentSection: sectionFileNames[0],
+    }));
+  }
+}, [sectionFileNames]);
 // Handle form submission
 const handleSave = () => {
-  // 1) Guardar ajustes en el servidor
-  updateSettingsMutation.mutate(formData);
+  // Determinar el número de sección según el archivo seleccionado
+  const filename = formData.currentSection;
+  const idx = sectionFiles.findIndex(f => f === filename);
+  const newSectionId = idx >= 0 ? idx + 1 : currentSectionId;
 
-  // 2) Actualizar sección actual (si cambió)
-  //    formData.currentSection es un string con el nombre de fichero,
-  //    sectionFiles es el array de strings que obtienes con useQuery.
-  const filename = formData.currentSection;                  // ej. "03-intro.js"
-  const idx = sectionFiles.findIndex((f) => f === filename); // ej. 2
-  const newSectionId = idx >= 0 ? idx + 1 : currentSectionId; // 1-based
+  // Guardar ajustes en el servidor con el ID numérico de sección
+  updateSettingsMutation.mutate({
+    ...formData,
+    currentSection: newSectionId,
+  });
 
+  // Actualizar sección actual en el estado si cambió
   if (newSectionId !== currentSectionId) {
     setCurrentSection(newSectionId);
   }
 
-  // 3) Reset timer si cambió el pomodoro
+  // Reset timer si cambió el pomodoro
   if (formData.pomodoroMinutes !== settings?.pomodoroMinutes) {
     resetTimer(formData.pomodoroMinutes);
   }
-
-  // 4) (opcional) cerrar modal aquí
-  // toggleSettings();
 };
 
 
@@ -169,30 +203,6 @@ const handleDeleteAllFiles = () => {
 };
 
 
-// Calcula dinámicamente las secciones según el nombre del fichero
-// Calcula dinámicamente las secciones según el nombre del fichero
-const sectionFileNames = Array.from(
-  new Set(exercises.map(ex => ex.fileName))
-).sort();
-// A partir de los nombres de fichero, crea las opciones
-const sectionOptions = sectionFileNames.map(name => ({
-  value: name,
-  label: name,
-}));
-
-// inicializa con el primer archivo (o "")
-const defaultSection = sectionFileNames[0] ?? '';
-useEffect(() => {
-  if (sectionFileNames.length > 0 && !formData.currentSection) {
-    setFormData(prev => ({
-      ...prev,
-      currentSection: sectionFileNames[0],  // usa el primer nombre de archivo
-    }));
-  }
-}, [sectionFileNames]);
-const [formData, setFormData] = useState<{ currentSection: string }>({
-  currentSection: defaultSection,
-});
 
 const getSectionName = (fileName?: string): string => {
   if (!fileName) return 'Sin sección';
@@ -289,7 +299,7 @@ const getSectionName = (fileName?: string): string => {
                   <li key={filename} className="flex justify-between items-center bg-gray-800 p-2 rounded">
                     <span className="text-gray-200 text-sm font-mono">{filename}</span>
                     <Button
-                      size="xs"
+                      size="icon"
                       variant="ghost"
                       className="text-red-500 hover:bg-red-600 hover:text-white"
                       onClick={() => handleFileDelete(filename)}
